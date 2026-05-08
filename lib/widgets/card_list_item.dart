@@ -7,11 +7,7 @@ class CardListItem extends ConsumerWidget {
   final CardModel card;
   final VoidCallback onTap;
 
-  const CardListItem({
-    super.key,
-    required this.card,
-    required this.onTap,
-  });
+  const CardListItem({super.key, required this.card, required this.onTap});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -30,18 +26,13 @@ class CardListItem extends ConsumerWidget {
         ),
         title: Text(
           card.name,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-          ),
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (card.expansion != null)
-              Text(
-                card.expansion!,
-                style: TextStyle(color: Colors.grey[600]),
-              ),
+              Text(card.expansion!, style: TextStyle(color: Colors.grey[600])),
             Row(
               children: [
                 Icon(Icons.inventory_2, size: 16, color: Colors.grey[600]),
@@ -50,17 +41,16 @@ class CardListItem extends ConsumerWidget {
                   'Cantidad: ${card.quantity}',
                   style: TextStyle(color: Colors.grey[600]),
                 ),
-                if (card.rarity != null) ...[
-                  const SizedBox(width: 12),
-                  Icon(Icons.star, size: 16, color: Colors.amber[700]),
-                  const SizedBox(width: 4),
-                  Text(
-                    card.rarity!,
-                    style: TextStyle(color: Colors.grey[600]),
-                  ),
-                ],
               ],
             ),
+            if (card.rarity != null)
+              Row(
+                children: [
+                  Icon(Icons.star, size: 16, color: Colors.amber[700]),
+                  const SizedBox(width: 4),
+                  Text(card.rarity!, style: TextStyle(color: Colors.grey[600])),
+                ],
+              ),
           ],
         ),
         trailing: Row(

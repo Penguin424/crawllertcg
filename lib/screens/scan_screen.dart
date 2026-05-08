@@ -4,9 +4,11 @@ import 'package:camera/camera.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../providers/ocr_provider.dart';
 import '../providers/permission_provider.dart';
+import '../services/flesh_and_blood_service.dart';
 import '../services/permission_service.dart';
 import '../widgets/permission_dialog.dart';
 import 'add_card_screen.dart';
+import 'card_search_results_screen.dart';
 import 'text_selection_screen.dart';
 
 class ScanScreen extends ConsumerStatefulWidget {
@@ -21,12 +23,13 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
   List<CameraDescription>? _cameras;
   bool _isInitialized = false;
   bool _isProcessing = false;
+  bool _torchOn = false;
   String? _errorMessage;
+  String _processingMessage = 'Analizando texto...';
 
   @override
   void initState() {
     super.initState();
-    // Show permission dialog first, then initialize camera
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _showPermissionDialogAndInitialize();
     });
@@ -35,14 +38,12 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
   Future<void> _showPermissionDialogAndInitialize() async {
     final permissionService = ref.read(permissionServiceProvider);
 
-    // Check if permission is already granted
     final isGranted = await permissionService.isCameraPermissionGranted();
     if (isGranted) {
       _initializeCamera();
       return;
     }
 
-    // Show dialog explaining why we need the permission
     if (!mounted) return;
 
     showDialog(
@@ -50,13 +51,15 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
       barrierDismissible: false,
       builder: (context) => PermissionDialog(
         title: 'Permiso de Cámara',
-        message: 'Esta aplicación necesita acceso a la cámara para escanear cartas de Flesh and Blood TCG.',
+        message:
+            'Esta aplicación necesita acceso a la cámara para escanear cartas de Flesh and Blood TCG.',
         onGranted: () async {
           await _requestPermissionAndInitialize();
         },
         onDenied: () {
           setState(() {
-            _errorMessage = 'Se requiere permiso de cámara para usar esta función';
+            _errorMessage =
+                'Se requiere permiso de cámara para usar esta función';
           });
         },
       ),
@@ -75,7 +78,8 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
         break;
       case PermissionResult.denied:
         setState(() {
-          _errorMessage = 'Se requiere permiso de cámara para escanear cartas. Por favor, intenta nuevamente.';
+          _errorMessage =
+              'Se requiere permiso de cámara para escanear cartas. Por favor, intenta nuevamente.';
         });
         break;
       case PermissionResult.permanentlyDenied:
@@ -86,7 +90,8 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
           context: context,
           builder: (context) => const PermissionPermanentlyDeniedDialog(
             title: 'Permiso Denegado',
-            message: 'Has denegado permanentemente el acceso a la cámara. Para usar esta función, debes habilitar el permiso en la configuración.',
+            message:
+                'Has denegado permanentemente el acceso a la cámara. Para usar esta función, debes habilitar el permiso en la configuración.',
           ),
         );
         break;
@@ -100,7 +105,6 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
 
   Future<void> _initializeCamera() async {
     try {
-      // Get available cameras
       _cameras = await availableCameras();
       if (_cameras == null || _cameras!.isEmpty) {
         setState(() {
@@ -109,7 +113,6 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
         return;
       }
 
-      // Initialize camera controller
       _cameraController = CameraController(
         _cameras![0],
         ResolutionPreset.high,
@@ -121,7 +124,7 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
       if (mounted) {
         setState(() {
           _isInitialized = true;
-          _errorMessage = null; // Clear any previous error
+          _errorMessage = null;
         });
       }
     } catch (e) {
@@ -133,71 +136,77 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
     }
   }
 
+  Future<void> _toggleTorch() async {
+    final controller = _cameraController;
+    if (controller == null || !controller.value.isInitialized) return;
+    try {
+      final next = !_torchOn;
+      await controller.setFlashMode(next ? FlashMode.torch : FlashMode.off);
+      if (mounted) setState(() => _torchOn = next);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo activar la linterna: $e')),
+        );
+      }
+    }
+  }
+
   Future<void> _takePicture() async {
     if (_cameraController == null || !_cameraController!.value.isInitialized) {
       return;
     }
-
     if (_isProcessing) return;
 
     setState(() {
       _isProcessing = true;
+      _processingMessage = 'Analizando texto...';
     });
 
     try {
       final image = await _cameraController!.takePicture();
       final ocrService = ref.read(ocrServiceProvider);
 
-      // Show loading dialog
-      if (mounted) {
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (context) => const Center(
-            child: Card(
-              child: Padding(
-                padding: EdgeInsets.all(20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircularProgressIndicator(),
-                    SizedBox(height: 16),
-                    Text('Analizando texto...'),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      }
-
-      // Extract text only from the focus rectangle area
-      // Rectangle is centered with 80% width and 30% height
       final detectedTexts = await ocrService.extractTextFromArea(
         image,
-        x: 0.1,     // 10% from left (to center the 80% width)
-        y: 0.35,    // 35% from top (to center the 30% height)
-        width: 0.8,  // 80% of total width
-        height: 0.3, // 30% of total height
+        x: 0.1,
+        y: 0.35,
+        width: 0.8,
+        height: 0.3,
       );
 
-      if (mounted) {
-        Navigator.pop(context); // Close loading dialog
+      if (!mounted) return;
 
-        // Navigate to text selection screen with all detected texts
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => TextSelectionScreen(
-              detectedTexts: detectedTexts,
-              imagePath: image.path,
-            ),
+      // No text detected → don't navigate, just nudge the user
+      if (detectedTexts.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'No se detectó texto. Prueba con mejor luz o acerca el nombre.'),
+            backgroundColor: Colors.orange,
           ),
         );
+        return;
       }
+
+      // Auto-skip when we got exactly one line: hit the API directly.
+      if (detectedTexts.length == 1) {
+        await _searchAndNavigate(detectedTexts.first, image.path);
+        return;
+      }
+
+      // Multiple options → show selection screen
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => TextSelectionScreen(
+            detectedTexts: detectedTexts,
+            imagePath: image.path,
+          ),
+        ),
+      );
     } catch (e) {
       if (mounted) {
-        Navigator.pop(context); // Close loading dialog
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error al procesar imagen: $e'),
@@ -206,9 +215,51 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
         );
       }
     } finally {
-      setState(() {
-        _isProcessing = false;
-      });
+      if (mounted) setState(() => _isProcessing = false);
+    }
+  }
+
+  Future<void> _searchAndNavigate(String text, String imagePath) async {
+    setState(() => _processingMessage = 'Buscando "$text"...');
+    try {
+      final results = await FleshAndBloodService().searchCards(text);
+      if (!mounted) return;
+
+      if (results.isEmpty) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => AddCardScreen(
+              initialName: text,
+              imagePath: imagePath,
+            ),
+          ),
+        );
+        return;
+      }
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => CardSearchResultsScreen(
+            results: results,
+            imagePath: imagePath,
+            searchQuery: text,
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      // API error → fall back to manual entry with the OCR'd name
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => AddCardScreen(
+            initialName: text,
+            imagePath: imagePath,
+          ),
+        ),
+      );
     }
   }
 
@@ -231,6 +282,12 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
       appBar: AppBar(
         title: const Text('Escanear Carta'),
         actions: [
+          if (_isInitialized)
+            IconButton(
+              tooltip: _torchOn ? 'Apagar linterna' : 'Encender linterna',
+              icon: Icon(_torchOn ? Icons.flash_on : Icons.flash_off),
+              onPressed: _toggleTorch,
+            ),
           IconButton(
             icon: const Icon(Icons.add),
             onPressed: () {
@@ -246,65 +303,21 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
         ],
       ),
       body: _errorMessage != null
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.error_outline,
-                      size: 100,
-                      color: Colors.red[300],
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      _errorMessage!,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 16),
-                    ),
-                    const SizedBox(height: 24),
-                    if (_errorMessage!.contains('permanentemente'))
-                      ElevatedButton.icon(
-                        onPressed: () async {
-                          await openAppSettings();
-                        },
-                        icon: const Icon(Icons.settings),
-                        label: const Text('Abrir Configuración'),
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 24,
-                            vertical: 12,
-                          ),
-                        ),
-                      )
-                    else
-                      ElevatedButton(
-                        onPressed: () {
-                          setState(() {
-                            _errorMessage = null;
-                          });
-                          _showPermissionDialogAndInitialize();
-                        },
-                        child: const Text('Reintentar'),
-                      ),
-                  ],
-                ),
-              ),
+          ? _ErrorView(
+              message: _errorMessage!,
+              onRetry: () {
+                setState(() => _errorMessage = null);
+                _showPermissionDialogAndInitialize();
+              },
             )
           : !_isInitialized
-              ? const Center(
-                  child: CircularProgressIndicator(),
-                )
+              ? const Center(child: CircularProgressIndicator())
               : Stack(
                   children: [
-                    // Camera preview
                     SizedBox.expand(
                       child: CameraPreview(_cameraController!),
                     ),
-                    // Focus rectangle overlay
                     _buildFocusOverlay(),
-                    // Overlay with instructions
                     Positioned(
                       top: 40,
                       left: 0,
@@ -347,7 +360,6 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
                         ),
                       ),
                     ),
-                    // Capture button
                     Positioned(
                       bottom: 40,
                       left: 0,
@@ -364,8 +376,89 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
                         ),
                       ),
                     ),
+                    if (_isProcessing)
+                      Positioned(
+                        bottom: 130,
+                        left: 0,
+                        right: 0,
+                        child: Center(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.black87,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Text(
+                                  _processingMessage,
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
+    );
+  }
+}
+
+class _ErrorView extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+
+  const _ErrorView({required this.message, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    final isPermanent = message.contains('permanentemente');
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, size: 100, color: Colors.red[300]),
+            const SizedBox(height: 16),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 24),
+            if (isPermanent)
+              ElevatedButton.icon(
+                onPressed: () => openAppSettings(),
+                icon: const Icon(Icons.settings),
+                label: const Text('Abrir Configuración'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
+                ),
+              )
+            else
+              ElevatedButton(
+                onPressed: onRetry,
+                child: const Text('Reintentar'),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -373,7 +466,6 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
 class _FocusRectanglePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    // Define the focus rectangle dimensions
     final double rectangleWidth = size.width * 0.8;
     final double rectangleHeight = size.height * 0.3;
     final double left = (size.width - rectangleWidth) / 2;
@@ -381,19 +473,15 @@ class _FocusRectanglePainter extends CustomPainter {
 
     final focusRect = Rect.fromLTWH(left, top, rectangleWidth, rectangleHeight);
 
-    // Draw the dark overlay with a transparent rectangle in the center
-    final overlayPaint = Paint()
-      ..color = Colors.black.withValues(alpha: 0.6);
+    final overlayPaint = Paint()..color = Colors.black.withValues(alpha: 0.6);
 
-    // Create a path for the entire screen
     final screenPath = Path()
       ..addRect(Rect.fromLTWH(0, 0, size.width, size.height));
 
-    // Create a path for the focus rectangle
     final focusPath = Path()
-      ..addRRect(RRect.fromRectAndRadius(focusRect, const Radius.circular(12)));
+      ..addRRect(
+          RRect.fromRectAndRadius(focusRect, const Radius.circular(12)));
 
-    // Subtract the focus rectangle from the screen path
     final overlayPath = Path.combine(
       PathOperation.difference,
       screenPath,
@@ -402,7 +490,6 @@ class _FocusRectanglePainter extends CustomPainter {
 
     canvas.drawPath(overlayPath, overlayPaint);
 
-    // Draw the green border around the focus rectangle
     final borderPaint = Paint()
       ..color = Colors.green
       ..style = PaintingStyle.stroke
@@ -413,16 +500,14 @@ class _FocusRectanglePainter extends CustomPainter {
       borderPaint,
     );
 
-    // Draw corner decorations
     final cornerPaint = Paint()
       ..color = Colors.green
       ..style = PaintingStyle.stroke
       ..strokeWidth = 6.0
       ..strokeCap = StrokeCap.round;
 
-    final cornerLength = 40.0;
+    const cornerLength = 40.0;
 
-    // Top-left corner
     canvas.drawLine(
       Offset(left, top + cornerLength),
       Offset(left, top),
@@ -434,7 +519,6 @@ class _FocusRectanglePainter extends CustomPainter {
       cornerPaint,
     );
 
-    // Top-right corner
     canvas.drawLine(
       Offset(left + rectangleWidth - cornerLength, top),
       Offset(left + rectangleWidth, top),
@@ -446,7 +530,6 @@ class _FocusRectanglePainter extends CustomPainter {
       cornerPaint,
     );
 
-    // Bottom-left corner
     canvas.drawLine(
       Offset(left, top + rectangleHeight - cornerLength),
       Offset(left, top + rectangleHeight),
@@ -458,7 +541,6 @@ class _FocusRectanglePainter extends CustomPainter {
       cornerPaint,
     );
 
-    // Bottom-right corner
     canvas.drawLine(
       Offset(left + rectangleWidth - cornerLength, top + rectangleHeight),
       Offset(left + rectangleWidth, top + rectangleHeight),
@@ -472,7 +554,5 @@ class _FocusRectanglePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) {
-    return false;
-  }
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

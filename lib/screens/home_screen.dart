@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'scan_screen.dart';
 import 'collection_screen.dart';
+import 'scan_screen.dart';
+import 'summary_screen.dart';
 
 final selectedIndexProvider = StateProvider<int>((ref) => 0);
 
@@ -13,12 +14,16 @@ class HomeScreen extends ConsumerWidget {
     final selectedIndex = ref.watch(selectedIndexProvider);
 
     final screens = [
+      const SummaryScreen(),
       const CollectionScreen(),
       const ScanScreen(),
     ];
 
     return Scaffold(
-      body: screens[selectedIndex],
+      body: IndexedStack(
+        index: selectedIndex,
+        children: screens,
+      ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: selectedIndex,
         onTap: (index) {
@@ -26,11 +31,18 @@ class HomeScreen extends ConsumerWidget {
         },
         items: const [
           BottomNavigationBarItem(
-            icon: Icon(Icons.collections),
+            icon: Icon(Icons.dashboard_outlined),
+            activeIcon: Icon(Icons.dashboard),
+            label: 'Resumen',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.collections_outlined),
+            activeIcon: Icon(Icons.collections),
             label: 'Almacén',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.camera_alt),
+            icon: Icon(Icons.camera_alt_outlined),
+            activeIcon: Icon(Icons.camera_alt),
             label: 'Escanear',
           ),
         ],

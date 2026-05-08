@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../providers/cards_provider.dart';
 import '../services/flesh_and_blood_service.dart';
+import '../services/price_service.dart';
 import 'add_card_screen.dart';
 import 'card_detail_screen.dart';
 
@@ -41,6 +42,7 @@ class CardSearchResultsScreen extends ConsumerWidget {
           rarity: card.rarity,
           imageUrl: card.image,
           price: card.price,
+          priceValue: PriceService.parsePrice(card.price),
           cardPageUrl: card.url,
           cardApiId: card.cardId,
           source: card.source,
@@ -103,7 +105,7 @@ class CardSearchResultsScreen extends ConsumerWidget {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: Theme.of(context).colorScheme.surface,
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.1),

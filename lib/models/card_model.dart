@@ -40,6 +40,9 @@ class CardModel extends HiveObject {
   @HiveField(11)
   String? source;
 
+  @HiveField(12)
+  double? priceValue;
+
   CardModel({
     required this.id,
     required this.name,
@@ -53,6 +56,7 @@ class CardModel extends HiveObject {
     this.cardPageUrl,
     this.cardApiId,
     this.source,
+    this.priceValue,
   });
 
   CardModel copyWith({
@@ -68,6 +72,8 @@ class CardModel extends HiveObject {
     String? cardPageUrl,
     String? cardApiId,
     String? source,
+    double? priceValue,
+    bool clearPriceValue = false,
   }) {
     return CardModel(
       id: id ?? this.id,
@@ -82,11 +88,12 @@ class CardModel extends HiveObject {
       cardPageUrl: cardPageUrl ?? this.cardPageUrl,
       cardApiId: cardApiId ?? this.cardApiId,
       source: source ?? this.source,
+      priceValue: clearPriceValue ? null : (priceValue ?? this.priceValue),
     );
   }
 
   @override
   String toString() {
-    return 'CardModel(id: $id, name: $name, quantity: $quantity, expansion: $expansion, rarity: $rarity)';
+    return 'CardModel(id: $id, name: $name, quantity: $quantity, expansion: $expansion, rarity: $rarity, priceValue: $priceValue)';
   }
 }

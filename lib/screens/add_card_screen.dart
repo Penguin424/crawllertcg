@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/cards_provider.dart';
+import '../services/price_service.dart';
 
 class AddCardScreen extends ConsumerStatefulWidget {
   final String? initialName;
@@ -62,6 +63,8 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
   Future<void> _saveCard() async {
     if (_formKey.currentState!.validate()) {
       try {
+        final priceText = _priceController.text.trim();
+        final priceValue = PriceService.parsePrice(priceText);
         await ref.read(cardsProvider.notifier).addCard(
               name: _nameController.text.trim(),
               quantity: _quantity,
@@ -71,9 +74,8 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
               rarity: _rarityController.text.trim().isEmpty
                   ? null
                   : _rarityController.text.trim(),
-              price: _priceController.text.trim().isEmpty
-                  ? null
-                  : _priceController.text.trim(),
+              price: priceText.isEmpty ? null : priceText,
+              priceValue: priceValue,
               cardPageUrl: _cardPageUrlController.text.trim().isEmpty
                   ? null
                   : _cardPageUrlController.text.trim(),
@@ -175,11 +177,20 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
               controller: _priceController,
               decoration: const InputDecoration(
                 labelText: 'Precio',
+                hintText: 'Ej. 12,50',
+                helperText: 'Solo números. Se usará para sumar el valor de tu colección.',
                 border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.attach_money),
+                prefixIcon: Icon(Icons.euro),
               ),
               keyboardType:
                   const TextInputType.numberWithOptions(decimal: true),
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) return null;
+                if (PriceService.parsePrice(value) == null) {
+                  return 'Introduce un número válido';
+                }
+                return null;
+              },
             ),
             const SizedBox(height: 16),
 

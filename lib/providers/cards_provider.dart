@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import '../models/card_model.dart';
 import '../services/database_service.dart';
+import 'collection_filter_provider.dart';
 import 'database_provider.dart';
 
 class CardsNotifier extends StateNotifier<List<CardModel>> {
@@ -23,6 +24,7 @@ class CardsNotifier extends StateNotifier<List<CardModel>> {
     String? notes,
     String? imageUrl,
     String? price,
+    double? priceValue,
     String? cardPageUrl,
     String? cardApiId,
     String? source,
@@ -37,6 +39,7 @@ class CardsNotifier extends StateNotifier<List<CardModel>> {
       notes: notes,
       imageUrl: imageUrl,
       price: price,
+      priceValue: priceValue,
       cardPageUrl: cardPageUrl,
       cardApiId: cardApiId,
       source: source,
@@ -53,6 +56,12 @@ class CardsNotifier extends StateNotifier<List<CardModel>> {
 
   Future<void> deleteCard(String id) async {
     await _databaseService.deleteCard(id);
+    loadCards();
+  }
+
+  /// Re-inserts a card preserving its original id. Used to undo a swipe-delete.
+  Future<void> restoreCard(CardModel card) async {
+    await _databaseService.addCard(card);
     loadCards();
   }
 
@@ -91,16 +100,103 @@ final totalCardsCountProvider = Provider<int>((ref) {
 
 final searchQueryProvider = StateProvider<String>((ref) => '');
 
+/// All distinct expansion names present in the collection (sorted, no nulls/blanks).
+final availableExpansionsProvider = Provider<List<String>>((ref) {
+  final cards = ref.watch(cardsProvider);
+  final set = <String>{};
+  for (final c in cards) {
+    final e = c.expansion?.trim();
+    if (e != null && e.isNotEmpty) set.add(e);
+  }
+  final list = set.toList()..sort();
+  return list;
+});
+
+/// All distinct rarity names present in the collection (sorted, no nulls/blanks).
+final availableRaritiesProvider = Provider<List<String>>((ref) {
+  final cards = ref.watch(cardsProvider);
+  final set = <String>{};
+  for (final c in cards) {
+    final r = c.rarity?.trim();
+    if (r != null && r.isNotEmpty) set.add(r);
+  }
+  final list = set.toList()..sort();
+  return list;
+});
+
 final filteredCardsProvider = Provider<List<CardModel>>((ref) {
   final cards = ref.watch(cardsProvider);
   final query = ref.watch(searchQueryProvider);
+  final filter = ref.watch(collectionFilterProvider);
 
-  if (query.isEmpty) return cards;
+  Iterable<CardModel> result = cards;
 
-  final lowerQuery = query.toLowerCase();
-  return cards
-      .where((card) =>
-          card.name.toLowerCase().contains(lowerQuery) ||
-          (card.expansion?.toLowerCase().contains(lowerQuery) ?? false))
-      .toList();
+  switch (filter.priceStatus) {
+    case PriceStatus.all:
+      break;
+    case PriceStatus.withPrice:
+      result = result.where((c) => c.priceValue != null);
+      break;
+    case PriceStatus.withoutPrice:
+      result = result.where((c) => c.priceValue == null);
+      break;
+  }
+
+  if (filter.expansions.isNotEmpty) {
+    result = result.where((c) =>
+        c.expansion != null && filter.expansions.contains(c.expansion!.trim()));
+  }
+
+  if (filter.rarities.isNotEmpty) {
+    result = result.where((c) =>
+        c.rarity != null && filter.rarities.contains(c.rarity!.trim()));
+  }
+
+  if (query.isNotEmpty) {
+    final lowerQuery = query.toLowerCase();
+    result = result.where((card) =>
+        card.name.toLowerCase().contains(lowerQuery) ||
+        (card.expansion?.toLowerCase().contains(lowerQuery) ?? false));
+  }
+
+  final list = result.toList();
+  _sortCards(list, filter.sortBy);
+  return list;
 });
+
+void _sortCards(List<CardModel> list, SortBy sortBy) {
+  int byPrice(CardModel a, CardModel b) {
+    final av = a.priceValue;
+    final bv = b.priceValue;
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1; // nulls last
+    if (bv == null) return -1;
+    return av.compareTo(bv);
+  }
+
+  switch (sortBy) {
+    case SortBy.dateAddedDesc:
+      list.sort((a, b) => b.dateAdded.compareTo(a.dateAdded));
+      break;
+    case SortBy.dateAddedAsc:
+      list.sort((a, b) => a.dateAdded.compareTo(b.dateAdded));
+      break;
+    case SortBy.nameAsc:
+      list.sort(
+          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+      break;
+    case SortBy.priceDesc:
+      list.sort((a, b) => byPrice(b, a));
+      break;
+    case SortBy.priceAsc:
+      list.sort(byPrice);
+      break;
+    case SortBy.quantityDesc:
+      list.sort((a, b) => b.quantity.compareTo(a.quantity));
+      break;
+    case SortBy.rarityAsc:
+      list.sort((a, b) =>
+          (a.rarity ?? '').toLowerCase().compareTo((b.rarity ?? '').toLowerCase()));
+      break;
+  }
+}

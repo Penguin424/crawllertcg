@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/card_model.dart';
 import '../providers/cards_provider.dart';
+import '../services/price_service.dart';
 
 class CardDetailScreen extends ConsumerWidget {
   final CardModel card;
@@ -96,24 +97,8 @@ class CardDetailScreen extends ConsumerWidget {
                         fontSize: 26, fontWeight: FontWeight.bold),
                     textAlign: TextAlign.center,
                   ),
-                  if (updatedCard.price != null) ...[
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.attach_money,
-                            size: 22, color: Colors.green[700]),
-                        Text(
-                          updatedCard.price!,
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.green[700],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+                  const SizedBox(height: 8),
+                  _PriceRow(card: updatedCard),
                 ],
               ),
             ),
@@ -260,6 +245,123 @@ class _DetailRow extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _PriceRow extends ConsumerWidget {
+  final CardModel card;
+
+  const _PriceRow({required this.card});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final hasPrice = card.priceValue != null;
+    final display = hasPrice
+        ? PriceService.formatPrice(card.priceValue!)
+        : 'Añadir precio';
+
+    return InkWell(
+      onTap: () => _editPrice(context, ref),
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              hasPrice ? Icons.euro : Icons.add_circle_outline,
+              size: 22,
+              color: hasPrice ? Colors.green[700] : theme.colorScheme.primary,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              display,
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color:
+                    hasPrice ? Colors.green[700] : theme.colorScheme.primary,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Icon(Icons.edit_outlined,
+                size: 16, color: Colors.grey[600]),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _editPrice(BuildContext context, WidgetRef ref) async {
+    final controller = TextEditingController(
+      text: card.priceValue?.toString().replaceAll('.', ',') ?? '',
+    );
+    final formKey = GlobalKey<FormState>();
+
+    final result = await showDialog<double?>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Editar precio'),
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            controller: controller,
+            autofocus: true,
+            keyboardType:
+                const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(
+              hintText: 'Ej. 12,50',
+              prefixIcon: Icon(Icons.euro),
+              border: OutlineInputBorder(),
+            ),
+            validator: (value) {
+              if (value == null || value.trim().isEmpty) return null;
+              if (PriceService.parsePrice(value) == null) {
+                return 'Introduce un número válido';
+              }
+              return null;
+            },
+          ),
+        ),
+        actions: [
+          if (card.priceValue != null)
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, double.nan),
+              child: const Text('Quitar precio',
+                  style: TextStyle(color: Colors.red)),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, null),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (formKey.currentState?.validate() ?? false) {
+                final raw = controller.text.trim();
+                if (raw.isEmpty) {
+                  Navigator.pop(ctx, double.nan);
+                } else {
+                  Navigator.pop(ctx, PriceService.parsePrice(raw));
+                }
+              }
+            },
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == null) return; // Cancelled
+
+    final isClear = result.isNaN;
+    final updated = card.copyWith(
+      priceValue: isClear ? null : result,
+      price: isClear ? null : PriceService.formatPrice(result),
+      clearPriceValue: isClear,
+    );
+    await ref.read(cardsProvider.notifier).updateCard(updated);
   }
 }
 
