@@ -73,11 +73,11 @@ class CardDetailScreen extends ConsumerWidget {
               color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
               child: Column(
                 children: [
-                  if (updatedCard.imageUrl != null)
+                  if (updatedCard.image != null)
                     ClipRRect(
                       borderRadius: BorderRadius.circular(12),
                       child: Image.network(
-                        updatedCard.imageUrl!,
+                        updatedCard.image!,
                         height: 220,
                         fit: BoxFit.contain,
                         errorBuilder: (_, __, ___) => Icon(
@@ -170,11 +170,11 @@ class CardDetailScreen extends ConsumerWidget {
                       label: 'Expansión',
                       value: updatedCard.expansion!,
                     ),
-                  if (updatedCard.cardApiId != null)
+                  if (updatedCard.cardId != null)
                     _DetailRow(
                       icon: Icons.tag,
                       label: 'Card ID',
-                      value: updatedCard.cardApiId!,
+                      value: updatedCard.cardId!,
                     ),
                   if (updatedCard.source != null)
                     _DetailRow(
@@ -187,8 +187,8 @@ class CardDetailScreen extends ConsumerWidget {
                     label: 'Fecha de adición',
                     value: DateFormat('dd/MM/yyyy').format(updatedCard.dateAdded),
                   ),
-                  if (updatedCard.cardPageUrl != null)
-                    _UrlRow(url: updatedCard.cardPageUrl!),
+                  if (updatedCard.url != null)
+                    _UrlRow(url: updatedCard.url!),
                   if (updatedCard.notes != null &&
                       updatedCard.notes!.isNotEmpty) ...[
                     const SizedBox(height: 16),
@@ -271,7 +271,7 @@ class _PriceRow extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              hasPrice ? Icons.euro : Icons.add_circle_outline,
+              hasPrice ? Icons.attach_money : Icons.add_circle_outline,
               size: 22,
               color: hasPrice ? Colors.green[700] : theme.colorScheme.primary,
             ),
@@ -296,7 +296,7 @@ class _PriceRow extends ConsumerWidget {
 
   Future<void> _editPrice(BuildContext context, WidgetRef ref) async {
     final controller = TextEditingController(
-      text: card.priceValue?.toString().replaceAll('.', ',') ?? '',
+      text: card.priceValue?.toStringAsFixed(2) ?? '',
     );
     final formKey = GlobalKey<FormState>();
 
@@ -312,8 +312,8 @@ class _PriceRow extends ConsumerWidget {
             keyboardType:
                 const TextInputType.numberWithOptions(decimal: true),
             decoration: const InputDecoration(
-              hintText: 'Ej. 12,50',
-              prefixIcon: Icon(Icons.euro),
+              hintText: 'Ej. 12.50',
+              prefixIcon: Icon(Icons.attach_money),
               border: OutlineInputBorder(),
             ),
             validator: (value) {

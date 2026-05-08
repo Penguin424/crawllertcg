@@ -9,11 +9,20 @@ class CardsNotifier extends StateNotifier<List<CardModel>> {
   final DatabaseService _databaseService;
 
   CardsNotifier(this._databaseService) : super([]) {
-    loadCards();
+    _initialize();
   }
 
-  void loadCards() {
-    state = _databaseService.getAllCards();
+  Future<void> _initialize() async {
+    await loadCards();
+    // Best-effort: don't surface snapshot failures to the UI.
+    try {
+      await _databaseService.recordDailySnapshotIfNeeded(cards: state);
+    } catch (_) {}
+  }
+
+  Future<void> loadCards() async {
+    final cards = await _databaseService.getAllCards();
+    state = cards;
   }
 
   Future<void> addCard({
@@ -22,65 +31,69 @@ class CardsNotifier extends StateNotifier<List<CardModel>> {
     String? expansion,
     String? rarity,
     String? notes,
-    String? imageUrl,
+    String? image,
     String? price,
     double? priceValue,
-    String? cardPageUrl,
-    String? cardApiId,
+    String? url,
+    String? cardId,
     String? source,
+    DateTime? dateAdded,
   }) async {
     final newCard = CardModel(
       id: const Uuid().v4(),
       name: name,
-      dateAdded: DateTime.now(),
+      dateAdded: dateAdded ?? DateTime.now(),
       quantity: quantity,
       expansion: expansion,
       rarity: rarity,
       notes: notes,
-      imageUrl: imageUrl,
+      image: image,
       price: price,
       priceValue: priceValue,
-      cardPageUrl: cardPageUrl,
-      cardApiId: cardApiId,
+      url: url,
+      cardId: cardId,
       source: source,
     );
 
     await _databaseService.addCard(newCard);
-    loadCards();
+    await loadCards();
   }
 
   Future<void> updateCard(CardModel card) async {
     await _databaseService.updateCard(card);
-    loadCards();
+    await loadCards();
   }
 
   Future<void> deleteCard(String id) async {
     await _databaseService.deleteCard(id);
-    loadCards();
+    await loadCards();
   }
 
   /// Re-inserts a card preserving its original id. Used to undo a swipe-delete.
   Future<void> restoreCard(CardModel card) async {
     await _databaseService.addCard(card);
-    loadCards();
+    await loadCards();
   }
 
   Future<void> incrementQuantity(String id) async {
-    final card = _databaseService.getCard(id);
+    final card = _findInState(id);
     if (card != null) {
       await updateCard(card.copyWith(quantity: card.quantity + 1));
     }
   }
 
   Future<void> decrementQuantity(String id) async {
-    final card = _databaseService.getCard(id);
+    final card = _findInState(id);
     if (card != null && card.quantity > 0) {
       await updateCard(card.copyWith(quantity: card.quantity - 1));
     }
   }
 
-  List<CardModel> searchCards(String query) {
-    return _databaseService.searchCards(query);
+  CardModel? _findInState(String id) {
+    for (final c in state) {
+      if (c.id == id) return c;
+    }
+    return null;
   }
 
   int get totalCards => state.length;

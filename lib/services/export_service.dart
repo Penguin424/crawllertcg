@@ -43,7 +43,7 @@ class ExportService {
       'priceText',
       'dateAdded',
       'source',
-      'cardApiId',
+      'cardId',
       'notes',
     ];
     buffer.writeln(headers.join(','));
@@ -61,7 +61,7 @@ class ExportService {
         c.price ?? '',
         c.dateAdded.toIso8601String(),
         c.source ?? '',
-        c.cardApiId ?? '',
+        c.cardId ?? '',
         c.notes ?? '',
       ].map(_csvEscape).join(',');
       buffer.writeln(row);
@@ -86,9 +86,9 @@ class ExportService {
         'priceValue': c.priceValue,
         'priceText': c.price,
         'dateAdded': c.dateAdded.toIso8601String(),
-        'imageUrl': c.imageUrl,
-        'cardPageUrl': c.cardPageUrl,
-        'cardApiId': c.cardApiId,
+        'image': c.image,
+        'url': c.url,
+        'cardId': c.cardId,
         'source': c.source,
         'notes': c.notes,
       };

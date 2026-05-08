@@ -1,23 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'services/database_service.dart';
-import 'providers/database_provider.dart';
 import 'screens/home_screen.dart';
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize database
-  final databaseService = DatabaseService();
-  await databaseService.init();
-  await databaseService.recordDailySnapshotIfNeeded();
-
   runApp(
-    ProviderScope(
-      overrides: [
-        databaseServiceProvider.overrideWithValue(databaseService),
-      ],
-      child: const MyApp(),
+    const ProviderScope(
+      child: MyApp(),
     ),
   );
 }

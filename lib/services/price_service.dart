@@ -27,11 +27,11 @@ class PriceService {
     return double.tryParse(normalized);
   }
 
-  /// Formats a numeric value as a currency string. Default: EUR with es_ES locale.
-  static String formatPrice(double value, {String currency = 'EUR'}) {
+  /// Formats a numeric value as a currency string. Default: USD with en_US locale.
+  static String formatPrice(double value, {String currency = 'USD'}) {
     final symbol = _currencySymbol(currency);
     final formatter = NumberFormat.currency(
-      locale: 'es_ES',
+      locale: 'en_US',
       symbol: symbol,
       decimalDigits: 2,
     );

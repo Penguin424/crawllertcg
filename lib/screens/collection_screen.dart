@@ -264,7 +264,7 @@ class _StatsHeader extends StatelessWidget {
           ),
           Expanded(
             child: _StatTile(
-              icon: Icons.euro,
+              icon: Icons.attach_money,
               label: 'Valor',
               value: stats.totalValue == 0
                   ? '—'
@@ -345,7 +345,7 @@ class _ActiveFiltersBar extends ConsumerWidget {
           if (filter.priceStatus != PriceStatus.all)
             _FilterChipPill(
               label: filter.priceStatus.label,
-              icon: Icons.euro,
+              icon: Icons.attach_money,
               onRemove: () => notifier.setPriceStatus(PriceStatus.all),
             ),
           for (final exp in filter.expansions)

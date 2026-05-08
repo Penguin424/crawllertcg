@@ -1,123 +1,151 @@
-import 'package:hive_flutter/hive_flutter.dart';
+import 'package:dio/dio.dart';
 import '../models/card_model.dart';
 import '../models/collection_snapshot.dart';
+import '../utils/http_client.dart';
 import 'price_service.dart';
 
+/// REST-backed data service. Replaces the previous Hive implementation.
+/// All endpoints follow the contract described in `schema_tcgs_api.md`.
 class DatabaseService {
-  static const String _cardsBoxName = 'cards';
-  static const String _snapshotsBoxName = 'collection_snapshots';
+  static const _cardsPath = '/cards';
+  static const _snapshotsPath = '/collection-snapshots';
 
-  Box<CardModel>? _cardsBox;
-  Box<CollectionSnapshot>? _snapshotsBox;
+  final HttpClient _http;
 
-  Future<void> init() async {
-    await Hive.initFlutter();
-    if (!Hive.isAdapterRegistered(0)) {
-      Hive.registerAdapter(CardModelAdapter());
-    }
-    if (!Hive.isAdapterRegistered(1)) {
-      Hive.registerAdapter(CollectionSnapshotAdapter());
-    }
-    _cardsBox = await Hive.openBox<CardModel>(_cardsBoxName);
-    _snapshotsBox =
-        await Hive.openBox<CollectionSnapshot>(_snapshotsBoxName);
-    await _migratePrices();
+  DatabaseService({HttpClient? client}) : _http = client ?? HttpClient.instance;
+
+  // ---- Cards ----
+
+  Future<List<CardModel>> getAllCards() async {
+    final res = await _http.get<dynamic>(_cardsPath);
+    return _decodeCardList(res.data);
   }
 
-  /// One-shot migration: for any card with `price` set as text but no
-  /// numeric `priceValue`, parse the text and store the number.
-  Future<void> _migratePrices() async {
-    final box = _cardsBox!;
-    for (final card in box.values) {
-      if (card.priceValue != null) continue;
-      final parsed = PriceService.parsePrice(card.price);
-      if (parsed != null) {
-        card.priceValue = parsed;
-        await card.save();
+  Future<CardModel?> getCard(String id) async {
+    try {
+      final res = await _http.get<dynamic>('$_cardsPath/$id');
+      final data = res.data;
+      if (data is Map<String, dynamic>) {
+        return CardModel.fromJson(data);
       }
+      if (data is Map) {
+        return CardModel.fromJson(Map<String, dynamic>.from(data));
+      }
+      return null;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null;
+      rethrow;
     }
   }
 
-  Box<CardModel> get cardsBox {
-    if (_cardsBox == null || !_cardsBox!.isOpen) {
-      throw Exception('Database not initialized. Call init() first.');
+  Future<CardModel> addCard(CardModel card) async {
+    try {
+      final res = await _http.post<dynamic>(_cardsPath, data: card.toJson());
+      return _decodeCard(res.data) ?? card;
+    } catch (e) {
+      print('Error adding card: $e');
+      rethrow;
     }
-    return _cardsBox!;
   }
 
-  Box<CollectionSnapshot> get snapshotsBox {
-    if (_snapshotsBox == null || !_snapshotsBox!.isOpen) {
-      throw Exception('Database not initialized. Call init() first.');
-    }
-    return _snapshotsBox!;
-  }
-
-  // CRUD Operations
-  Future<void> addCard(CardModel card) async {
-    await cardsBox.put(card.id, card);
-  }
-
-  Future<void> updateCard(CardModel card) async {
-    await cardsBox.put(card.id, card);
+  Future<CardModel> updateCard(CardModel card) async {
+    final res = await _http.put<dynamic>(
+      '$_cardsPath/${card.id}',
+      data: card.toJson(),
+    );
+    return _decodeCard(res.data) ?? card;
   }
 
   Future<void> deleteCard(String id) async {
-    await cardsBox.delete(id);
+    await _http.delete<dynamic>('$_cardsPath/$id');
   }
 
-  CardModel? getCard(String id) {
-    return cardsBox.get(id);
+  // ---- Snapshots ----
+
+  Future<List<CollectionSnapshot>> getAllSnapshots() async {
+    final res = await _http.get<dynamic>(_snapshotsPath);
+    return _decodeSnapshotList(res.data);
   }
 
-  List<CardModel> getAllCards() {
-    return cardsBox.values.toList();
+  Future<CollectionSnapshot?> getLatestSnapshot() async {
+    final list = await getAllSnapshots();
+    if (list.isEmpty) return null;
+    list.sort((a, b) => b.date.compareTo(a.date));
+    return list.first;
   }
 
-  List<CardModel> searchCards(String query) {
-    final lowerQuery = query.toLowerCase();
-    return cardsBox.values
-        .where((card) =>
-            card.name.toLowerCase().contains(lowerQuery) ||
-            (card.expansion?.toLowerCase().contains(lowerQuery) ?? false))
+  Future<CollectionSnapshot?> getSnapshotForDate(DateTime date) async {
+    try {
+      final res = await _http.get<dynamic>('$_snapshotsPath/${_dayKey(date)}');
+      final data = res.data;
+      if (data is Map<String, dynamic>) {
+        return CollectionSnapshot.fromJson(data);
+      }
+      if (data is Map) {
+        return CollectionSnapshot.fromJson(Map<String, dynamic>.from(data));
+      }
+      return null;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null;
+      rethrow;
+    }
+  }
+
+  /// Posts a snapshot for today if none exists yet for the current day.
+  /// Idempotent: calling it multiple times the same day is a no-op.
+  Future<void> recordDailySnapshotIfNeeded({List<CardModel>? cards}) async {
+    final now = DateTime.now();
+    final existing = await getSnapshotForDate(now);
+    if (existing != null) return;
+
+    final source = cards ?? await getAllCards();
+    final snapshot = CollectionSnapshot(
+      date: now,
+      totalValue: PriceService.totalValue(source),
+      uniqueCards: source.length,
+      totalCards: source.fold(0, (sum, c) => sum + c.quantity),
+    );
+    await _http.post<dynamic>(_snapshotsPath, data: snapshot.toJson());
+  }
+
+  // ---- Helpers ----
+
+  static String _dayKey(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  static List<CardModel> _decodeCardList(dynamic data) {
+    final list = _extractList(data, ['cards', 'data', 'results']);
+    return list
+        .whereType<Map>()
+        .map((m) => CardModel.fromJson(Map<String, dynamic>.from(m)))
         .toList();
   }
 
-  Stream<BoxEvent> watchCards() {
-    return cardsBox.watch();
+  static CardModel? _decodeCard(dynamic data) {
+    if (data is Map<String, dynamic>) return CardModel.fromJson(data);
+    if (data is Map) return CardModel.fromJson(Map<String, dynamic>.from(data));
+    if (data is Map && data['card'] is Map) {
+      return CardModel.fromJson(Map<String, dynamic>.from(data['card'] as Map));
+    }
+    return null;
   }
 
-  int get totalCards => cardsBox.length;
-
-  Future<void> clearAllCards() async {
-    await cardsBox.clear();
+  static List<CollectionSnapshot> _decodeSnapshotList(dynamic data) {
+    final list = _extractList(data, ['snapshots', 'data', 'results']);
+    return list
+        .whereType<Map>()
+        .map((m) => CollectionSnapshot.fromJson(Map<String, dynamic>.from(m)))
+        .toList();
   }
 
-  // Snapshot operations
-  CollectionSnapshot? get latestSnapshot {
-    final values = snapshotsBox.values.toList();
-    if (values.isEmpty) return null;
-    values.sort((a, b) => b.date.compareTo(a.date));
-    return values.first;
+  static List<dynamic> _extractList(dynamic data, List<String> wrapperKeys) {
+    if (data is List) return data;
+    if (data is Map) {
+      for (final key in wrapperKeys) {
+        final inner = data[key];
+        if (inner is List) return inner;
+      }
+    }
+    return const [];
   }
-
-  /// Saves a snapshot for today if none exists yet for the current day.
-  /// Idempotent: calling it multiple times the same day is a no-op.
-  Future<void> recordDailySnapshotIfNeeded() async {
-    final now = DateTime.now();
-    final todayKey = _dayKey(now);
-    final last = latestSnapshot;
-    if (last != null && _dayKey(last.date) == todayKey) return;
-
-    final cards = getAllCards();
-    final snapshot = CollectionSnapshot(
-      date: now,
-      totalValue: PriceService.totalValue(cards),
-      uniqueCards: cards.length,
-      totalCards: cards.fold(0, (sum, c) => sum + c.quantity),
-    );
-    await snapshotsBox.put(todayKey, snapshot);
-  }
-
-  String _dayKey(DateTime d) =>
-      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 }

@@ -40,12 +40,13 @@ class CardSearchResultsScreen extends ConsumerWidget {
           quantity: quantity,
           expansion: card.expansion,
           rarity: card.rarity,
-          imageUrl: card.image,
+          image: card.image,
           price: card.price,
           priceValue: PriceService.parsePrice(card.price),
-          cardPageUrl: card.url,
-          cardApiId: card.cardId,
+          url: card.url,
+          cardId: card.cardId,
           source: card.source,
+          dateAdded: DateTime.now(),
         );
 
     if (!context.mounted) return;

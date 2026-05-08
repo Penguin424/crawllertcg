@@ -1,46 +1,16 @@
-import 'package:hive/hive.dart';
-
-part 'card_model.g.dart';
-
-@HiveType(typeId: 0)
-class CardModel extends HiveObject {
-  @HiveField(0)
+class CardModel {
   String id;
-
-  @HiveField(1)
   String name;
-
-  @HiveField(2)
   DateTime dateAdded;
-
-  @HiveField(3)
   int quantity;
-
-  @HiveField(4)
   String? expansion;
-
-  @HiveField(5)
   String? rarity;
-
-  @HiveField(6)
   String? notes;
-
-  @HiveField(7)
-  String? imageUrl;
-
-  @HiveField(8)
+  String? image;
   String? price;
-
-  @HiveField(9)
-  String? cardPageUrl;
-
-  @HiveField(10)
-  String? cardApiId;
-
-  @HiveField(11)
+  String? url;
+  String? cardId;
   String? source;
-
-  @HiveField(12)
   double? priceValue;
 
   CardModel({
@@ -51,13 +21,49 @@ class CardModel extends HiveObject {
     this.expansion,
     this.rarity,
     this.notes,
-    this.imageUrl,
+    this.image,
     this.price,
-    this.cardPageUrl,
-    this.cardApiId,
+    this.url,
+    this.cardId,
     this.source,
     this.priceValue,
   });
+
+  factory CardModel.fromJson(Map<String, dynamic> json) {
+    return CardModel(
+      id: json['id']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      dateAdded: _parseDate(json['dateAdded']) ?? DateTime.now(),
+      quantity: _parseInt(json['quantity']) ?? 1,
+      expansion: json['expansion']?.toString(),
+      rarity: json['rarity']?.toString(),
+      notes: json['notes']?.toString(),
+      image: json['image']?.toString(),
+      price: json['price']?.toString(),
+      url: json['url']?.toString(),
+      cardId: json['cardId']?.toString(),
+      source: json['source']?.toString(),
+      priceValue: _parseDouble(json['priceValue']),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'dateAdded': dateAdded.toUtc().toIso8601String(),
+      'quantity': quantity,
+      'expansion': expansion,
+      'rarity': rarity,
+      'notes': notes,
+      'image': image,
+      'price': price,
+      'url': url,
+      'cardId': cardId,
+      'source': source,
+      'priceValue': priceValue,
+    };
+  }
 
   CardModel copyWith({
     String? id,
@@ -67,10 +73,10 @@ class CardModel extends HiveObject {
     String? expansion,
     String? rarity,
     String? notes,
-    String? imageUrl,
+    String? image,
     String? price,
-    String? cardPageUrl,
-    String? cardApiId,
+    String? url,
+    String? cardId,
     String? source,
     double? priceValue,
     bool clearPriceValue = false,
@@ -83,10 +89,10 @@ class CardModel extends HiveObject {
       expansion: expansion ?? this.expansion,
       rarity: rarity ?? this.rarity,
       notes: notes ?? this.notes,
-      imageUrl: imageUrl ?? this.imageUrl,
+      image: image ?? this.image,
       price: price ?? this.price,
-      cardPageUrl: cardPageUrl ?? this.cardPageUrl,
-      cardApiId: cardApiId ?? this.cardApiId,
+      url: url ?? this.url,
+      cardId: cardId ?? this.cardId,
       source: source ?? this.source,
       priceValue: clearPriceValue ? null : (priceValue ?? this.priceValue),
     );
@@ -96,4 +102,24 @@ class CardModel extends HiveObject {
   String toString() {
     return 'CardModel(id: $id, name: $name, quantity: $quantity, expansion: $expansion, rarity: $rarity, priceValue: $priceValue)';
   }
+}
+
+DateTime? _parseDate(dynamic value) {
+  if (value == null) return null;
+  if (value is DateTime) return value;
+  return DateTime.tryParse(value.toString());
+}
+
+int? _parseInt(dynamic value) {
+  if (value == null) return null;
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return int.tryParse(value.toString());
+}
+
+double? _parseDouble(dynamic value) {
+  if (value == null) return null;
+  if (value is double) return value;
+  if (value is num) return value.toDouble();
+  return double.tryParse(value.toString());
 }

@@ -9,7 +9,7 @@ class AddCardScreen extends ConsumerStatefulWidget {
   final String? initialExpansion;
   final String? initialRarity;
   final String? initialPrice;
-  final String? initialCardPageUrl;
+  final String? initialUrl;
 
   const AddCardScreen({
     super.key,
@@ -18,7 +18,7 @@ class AddCardScreen extends ConsumerStatefulWidget {
     this.initialExpansion,
     this.initialRarity,
     this.initialPrice,
-    this.initialCardPageUrl,
+    this.initialUrl,
   });
 
   @override
@@ -31,7 +31,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
   late TextEditingController _expansionController;
   late TextEditingController _rarityController;
   late TextEditingController _priceController;
-  late TextEditingController _cardPageUrlController;
+  late TextEditingController _urlController;
   late TextEditingController _notesController;
   int _quantity = 1;
 
@@ -44,8 +44,8 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
     _rarityController =
         TextEditingController(text: widget.initialRarity ?? '');
     _priceController = TextEditingController(text: widget.initialPrice ?? '');
-    _cardPageUrlController =
-        TextEditingController(text: widget.initialCardPageUrl ?? '');
+    _urlController =
+        TextEditingController(text: widget.initialUrl ?? '');
     _notesController = TextEditingController();
   }
 
@@ -55,7 +55,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
     _expansionController.dispose();
     _rarityController.dispose();
     _priceController.dispose();
-    _cardPageUrlController.dispose();
+    _urlController.dispose();
     _notesController.dispose();
     super.dispose();
   }
@@ -76,13 +76,14 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
                   : _rarityController.text.trim(),
               price: priceText.isEmpty ? null : priceText,
               priceValue: priceValue,
-              cardPageUrl: _cardPageUrlController.text.trim().isEmpty
+              url: _urlController.text.trim().isEmpty
                   ? null
-                  : _cardPageUrlController.text.trim(),
+                  : _urlController.text.trim(),
               notes: _notesController.text.trim().isEmpty
                   ? null
                   : _notesController.text.trim(),
-              imageUrl: widget.imagePath,
+              image: widget.imagePath,
+              dateAdded: DateTime.now(),
             );
 
         if (mounted) {
@@ -177,10 +178,10 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
               controller: _priceController,
               decoration: const InputDecoration(
                 labelText: 'Precio',
-                hintText: 'Ej. 12,50',
+                hintText: 'Ej. 12.50',
                 helperText: 'Solo números. Se usará para sumar el valor de tu colección.',
                 border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.euro),
+                prefixIcon: Icon(Icons.attach_money),
               ),
               keyboardType:
                   const TextInputType.numberWithOptions(decimal: true),
@@ -196,7 +197,7 @@ class _AddCardScreenState extends ConsumerState<AddCardScreen> {
 
             // URL de la carta
             TextFormField(
-              controller: _cardPageUrlController,
+              controller: _urlController,
               decoration: const InputDecoration(
                 labelText: 'URL de la carta',
                 border: OutlineInputBorder(),
